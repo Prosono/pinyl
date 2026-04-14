@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pinyl – kort</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="wrap">
+    <header class="topbar">
+      <div>
+        <h1>Kortadministrasjon</h1>
+        <p class="muted">Registrer tagger og knytt dem til Spotify-URI-er</p>
+      </div>
+      <nav>
+        <a class="button secondary" href="{{ url_for('index') }}">Dashboard</a>
+        <a class="button secondary" href="{{ url_for('cards_page') }}">Kort</a>
+      </nav>
+    </header>
+
+    <section class="grid two">
+      <article class="card">
+        <h2>Registrer nytt kort</h2>
+        <div class="actions">
+          <button class="button" type="button" id="scan-btn">Vent på neste tag</button>
+          <span id="scan-status" class="muted">Sist sett: {{ state.last_seen_uid or '-' }}</span>
+        </div>
+        <form method="post" action="{{ url_for('save_card_route') }}" class="stack gap top-gap">
+          <label>UID
+            <input type="text" name="uid" id="uid" required placeholder="1D1430E5990000">
+          </label>
+          <label>Navn
+            <input type="text" name="name" id="name" placeholder="Mørke skyer">
+          </label>
+          <label>Spotify URI eller lenke
+            <input type="text" name="uri" id="uri" required placeholder="spotify:album:... eller https://open.spotify.com/...">
+          </label>
+          <label>Notat
+            <textarea name="notes" id="notes" rows="3" placeholder="Valgfritt"></textarea>
+          </label>
+          <button class="button" type="submit">Lagre kort</button>
+        </form>
+      </article>
+
+      <article class="card">
+        <h2>Tips</h2>
+        <ul class="list">
+          <li>Hold taggen rolig på leseren et par sekunder ved første registrering.</li>
+          <li>Du kan lime inn både Spotify-URI og vanlige Spotify-lenker.</li>
+          <li>Når et kort er lagret, starter avspillingen automatisk ved neste skann.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="card">
+      <h2>Registrerte kort</h2>
+      {% if cards %}
+      <table>
+        <thead>
+          <tr><th>UID</th><th>Navn</th><th>URI</th><th>Notat</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for uid, card in cards.items() %}
+          <tr>
+            <td><code>{{ uid }}</code></td>
+            <td>{{ card.name }}</td>
+            <td class="truncate">{{ card.uri }}</td>
+            <td>{{ card.notes }}</td>
+            <td>
+              <form method="post" action="{{ url_for('delete_card', uid=uid) }}" onsubmit="return confirm('Slette dette kortet?');">
+                <button class="button danger" type="submit">Slett</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+        <p class="muted">Ingen kort registrert ennå.</p>
+      {% endif %}
+    </section>
+  </div>
+
+<script>
+const scanBtn = document.getElementById('scan-btn');
+const scanStatus = document.getElementById('scan-status');
+scanBtn.addEventListener('click', async () => {
+  scanBtn.disabled = true;
+  scanStatus.textContent = 'Venter på ny tag ...';
+  try {
+    const res = await fetch('/api/wait-for-card');
+    const data = await res.json();
+    if (data.ok) {
+      document.getElementById('uid').value = data.uid;
+      if (data.card) {
+        document.getElementById('name').value = data.card.name || '';
+        document.getElementById('uri').value = data.card.uri || '';
+        document.getElementById('notes').value = data.card.notes || '';
+      }
+      scanStatus.textContent = 'Fant tag: ' + data.uid;
+    } else {
+      scanStatus.textContent = 'Ingen ny tag oppdaget innen tidsfristen.';
+    }
+  } catch (err) {
+    scanStatus.textContent = 'Feil ved skanning.';
+  } finally {
+    scanBtn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

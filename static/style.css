@@ -1,0 +1,75 @@
+:root {
+  --bg: #0e1116;
+  --surface: #171c24;
+  --surface-2: #1d2430;
+  --border: #2b3442;
+  --text: #edf2f7;
+  --muted: #a6b1c0;
+  --accent: #7c9cff;
+  --danger: #ff6b6b;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Inter, system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+.wrap { max-width: 1200px; margin: 0 auto; padding: 24px; }
+.topbar {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 16px; margin-bottom: 20px;
+}
+h1, h2 { margin: 0 0 8px; }
+h2 { font-size: 1.1rem; }
+.muted { color: var(--muted); }
+.small { font-size: .9rem; }
+.grid { display: grid; gap: 16px; margin-bottom: 16px; }
+.grid.two { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 18px;
+}
+.kv {
+  display: flex; justify-content: space-between; gap: 16px;
+  padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.kv:last-child { border-bottom: 0; }
+.button {
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 12px; padding: 10px 14px;
+  background: var(--accent); color: white; text-decoration: none; cursor: pointer;
+}
+.button.secondary { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+.button.danger { background: var(--danger); }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.stack { display: flex; flex-direction: column; }
+.gap { gap: 12px; }
+.top-gap { margin-top: 12px; }
+input, textarea {
+  width: 100%; margin-top: 6px; border-radius: 12px; border: 1px solid var(--border);
+  background: #0f141c; color: var(--text); padding: 12px;
+}
+.notice {
+  margin-top: 14px; border-radius: 12px; padding: 12px; background: rgba(255,255,255,0.05);
+}
+.notice.error { background: rgba(255,107,107,0.1); color: #ffd2d2; }
+table {
+  width: 100%; border-collapse: collapse; font-size: .95rem;
+}
+th, td {
+  text-align: left; padding: 12px 10px; border-bottom: 1px solid rgba(255,255,255,.08); vertical-align: top;
+}
+code {
+  background: #10151d; border: 1px solid var(--border); padding: 3px 6px; border-radius: 8px;
+}
+.truncate {
+  max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.list { margin: 0; padding-left: 18px; }
+.nowplaying { display: flex; flex-direction: column; gap: 4px; }
+@media (max-width: 720px) {
+  .topbar { flex-direction: column; }
+}

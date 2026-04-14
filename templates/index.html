@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pinyl</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="wrap">
+    <header class="topbar">
+      <div>
+        <h1>Pinyl</h1>
+        <p class="muted">NFC-styrt Spotify-avspilling på Raspberry Pi</p>
+      </div>
+      <nav>
+        <a class="button secondary" href="{{ url_for('index') }}">Dashboard</a>
+        <a class="button secondary" href="{{ url_for('cards_page') }}">Kort</a>
+      </nav>
+    </header>
+
+    <section class="grid two">
+      <article class="card">
+        <h2>Status</h2>
+        <div class="kv"><span>Mål-enhet</span><strong>{{ target_device }}</strong></div>
+        <div class="kv"><span>Leser</span><strong>{{ state.reader_name or '-' }}</strong></div>
+        <div class="kv"><span>NFC-status</span><strong>{{ state.status }}</strong></div>
+        <div class="kv"><span>Sist sett UID</span><strong>{{ state.last_seen_uid or '-' }}</strong></div>
+        <div class="kv"><span>Sist sett</span><strong>{{ state.last_seen_at|pretty_dt }}</strong></div>
+        <div class="kv"><span>Sist startet</span><strong>{{ state.last_played_at|pretty_dt }}</strong></div>
+        <div class="kv"><span>Sist URI</span><strong class="truncate">{{ state.last_played_uri or '-' }}</strong></div>
+        {% if state.last_error %}
+          <div class="notice error">{{ state.last_error }}</div>
+        {% endif %}
+      </article>
+
+      <article class="card">
+        <h2>Spotify</h2>
+        <div class="kv"><span>API-konfigurasjon</span><strong>{{ 'OK' if spotify_ready else 'Mangler .env' }}</strong></div>
+        <div class="kv"><span>Autorisert</span><strong>{{ 'Ja' if spotify_authorized else 'Nei' }}</strong></div>
+        <div class="actions">
+          <a class="button" href="{{ url_for('spotify_login') }}">Koble til Spotify</a>
+          <a class="button secondary" href="{{ url_for('spotify_logout') }}">Koble fra</a>
+        </div>
+        <p class="muted small">Bruk samme Spotify-konto som spiller mot Raspotify/librespot på Pi-en.</p>
+      </article>
+    </section>
+
+    <section class="grid two">
+      <article class="card">
+        <h2>Spiller nå</h2>
+        {% if playback and playback.item %}
+          <div class="nowplaying">
+            <strong>{{ playback.item.name }}</strong>
+            <span>{{ playback.item.artists | map(attribute='name') | join(', ') if playback.item.artists else '' }}</span>
+            <span class="muted">{{ playback.device.name if playback.device else '' }}</span>
+          </div>
+        {% else %}
+          <p class="muted">Ingen aktiv avspilling funnet akkurat nå.</p>
+        {% endif %}
+
+        <form id="play-form" class="stack gap">
+          <label for="play-uri">Test en URI eller Spotify-lenke</label>
+          <input id="play-uri" name="uri" type="text" placeholder="spotify:album:... eller https://open.spotify.com/...">
+          <div class="actions">
+            <button class="button" type="submit">Spill</button>
+            <button class="button secondary" type="button" onclick="sendAction('/pause')">Pause</button>
+            <button class="button secondary" type="button" onclick="sendAction('/next')">Neste</button>
+          </div>
+        </form>
+        <div id="play-result" class="muted small"></div>
+      </article>
+
+      <article class="card">
+        <h2>Tilgjengelige Spotify-enheter</h2>
+        {% if devices %}
+          <ul class="list">
+            {% for device in devices %}
+              <li>
+                <strong>{{ device.name }}</strong>
+                <span class="muted">{{ device.type }}{% if device.is_active %} · aktiv{% endif %}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="muted">Ingen enheter returnert fra API-et akkurat nå.</p>
+        {% endif %}
+      </article>
+    </section>
+
+    <section class="card">
+      <h2>Kjente kort</h2>
+      {% if cards %}
+        <table>
+          <thead>
+            <tr><th>UID</th><th>Navn</th><th>Spotify</th><th>Notat</th></tr>
+          </thead>
+          <tbody>
+            {% for uid, card in cards.items() %}
+              <tr>
+                <td><code>{{ uid }}</code></td>
+                <td>{{ card.name }}</td>
+                <td class="truncate">{{ card.uri }}</td>
+                <td>{{ card.notes }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="muted">Ingen kort registrert ennå.</p>
+      {% endif %}
+    </section>
+  </div>
+
+<script>
+async function sendAction(url, payload = null) {
+  const opts = {method: 'POST', headers: {}};
+  if (payload) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(payload);
+  }
+  const res = await fetch(url, opts);
+  const data = await res.json().catch(() => ({}));
+  const box = document.getElementById('play-result');
+  if (data.ok) {
+    box.textContent = 'OK';
+    window.setTimeout(() => window.location.reload(), 600);
+  } else {
+    box.textContent = data.error || 'Noe gikk galt';
+  }
+}
+
+document.getElementById('play-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const uri = document.getElementById('play-uri').value.trim();
+  if (!uri) return;
+  await sendAction('/play', {uri});
+});
+</script>
+</body>
+</html>
