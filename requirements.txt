@@ -1,4 +1,3 @@
 Flask==3.1.2
 spotipy==2.25.1
-pyscard==2.3.0
 python-dotenv==1.1.1

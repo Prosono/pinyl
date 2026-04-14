@@ -9,8 +9,8 @@ from urllib.parse import urlparse, parse_qs
 from flask import Flask, jsonify, redirect, render_template, request, url_for
 from spotipy import Spotify
 from spotipy.oauth2 import SpotifyOAuth
-from smartcard.Exceptions import NoCardException
-from smartcard.System import readers
+import re
+import subprocess
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
@@ -214,26 +214,35 @@ def current_devices_safe():
 
 
 def read_uid_once():
-    available = readers()
-    if not available:
+    try:
+        result = subprocess.run(
+            ["nfc-list", "-v"],
+            capture_output=True,
+            text=True,
+            timeout=4,
+        )
+
+        output = (result.stdout or "") + "\n" + (result.stderr or "")
+
+        if "ACS / ACR122U PICC Interface opened" in output:
+            update_state(reader_name="ACS ACR122U")
+
+        match = re.search(r"UID \(NFCID1\):\s*([0-9a-fA-F ]+)", output)
+        if match:
+            uid = "".join(match.group(1).split()).upper()
+            return uid
+
+        if "NFC device:" in output:
+            return None
+
         update_state(reader_name=None, status="no_reader")
         return None
 
-    reader = available[0]
-    update_state(reader_name=str(reader))
-    connection = reader.createConnection()
-    try:
-        connection.connect()
-        get_uid = [0xFF, 0xCA, 0x00, 0x00, 0x00]
-        data, sw1, sw2 = connection.transmit(get_uid)
-        if sw1 == 0x90 and sw2 == 0x00:
-            return "".join(f"{b:02X}" for b in data)
-    except NoCardException:
+    except subprocess.TimeoutExpired:
         return None
     except Exception as exc:
         update_state(last_error=f"NFC-feil: {exc}", status="error")
         return None
-    return None
 
 
 def nfc_worker():
