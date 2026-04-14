@@ -166,12 +166,18 @@ def find_target_device(sp: Spotify):
     raise RuntimeError(f"Fant ikke Spotify-enheten '{target_name}'. Åpne Spotify og bekreft at Raspotify/librespot kjører.")
 
 
-def play_uri(uri: str):
-    sp = get_spotify_client()
+def activate_target_device(sp: Spotify):
     target = find_target_device(sp)
     device_id = target["id"]
-    sp.transfer_playback(device_id=device_id, force_play=True)
-    time.sleep(0.8)
+    sp.transfer_playback(device_id=device_id, force_play=False)
+    time.sleep(0.5)
+    return target
+
+
+def play_uri(uri: str):
+    sp = get_spotify_client()
+    target = activate_target_device(sp)
+    device_id = target["id"]
 
     uri = normalize_spotify_reference(uri)
     if uri.startswith(("spotify:album:", "spotify:playlist:", "spotify:artist:")):
@@ -180,6 +186,14 @@ def play_uri(uri: str):
         sp.start_playback(device_id=device_id, uris=[uri])
     else:
         raise RuntimeError(f"Ukjent eller ugyldig Spotify-referanse: {uri}")
+
+    return target
+
+
+def resume_playback():
+    sp = get_spotify_client()
+    target = activate_target_device(sp)
+    sp.start_playback(device_id=target["id"])
     return target
 
 
@@ -192,17 +206,9 @@ def pause_playback():
 
 def next_track():
     sp = get_spotify_client()
-    target = find_target_device(sp)
+    target = activate_target_device(sp)
     sp.next_track(device_id=target["id"])
     return target
-
-
-def current_playback():
-    try:
-        sp = get_spotify_client()
-        return sp.current_playback()
-    except Exception:
-        return None
 
 
 def current_devices_safe():
@@ -341,15 +347,25 @@ def delete_card(uid):
 
 @app.post("/play")
 def play_route():
-    uri = request.form.get("uri") or request.json.get("uri") if request.is_json else request.form.get("uri")
+    uri = None
+
+    if request.is_json:
+        payload = request.get_json(silent=True) or {}
+        uri = payload.get("uri")
+    else:
+        uri = request.form.get("uri")
+
     try:
-        target = play_uri(uri)
+        if uri and uri.strip():
+            target = play_uri(uri)
+        else:
+            target = resume_playback()
+
         update_state(last_error=None, status="playing")
         return jsonify({"ok": True, "device": target.get("name")})
     except Exception as exc:
         update_state(last_error=str(exc), status="error")
         return jsonify({"ok": False, "error": str(exc)}), 400
-
 
 @app.post("/pause")
 def pause_route():
