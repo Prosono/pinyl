@@ -154,6 +154,97 @@ def normalize_spotify_reference(value: str) -> str:
     return value
 
 
+def parse_spotify_reference(value: str):
+    ref = normalize_spotify_reference(value)
+    if not ref.startswith("spotify:"):
+        return None, None
+
+    parts = ref.split(":")
+    if len(parts) < 3:
+        return None, None
+
+    item_type = parts[1]
+    item_id = parts[2]
+    return item_type, item_id
+
+
+def get_spotify_metadata(ref: str):
+    try:
+        sp = get_spotify_client()
+    except Exception:
+        return None
+
+    item_type, item_id = parse_spotify_reference(ref)
+    if not item_type or not item_id:
+        return None
+
+    try:
+        if item_type == "album":
+            item = sp.album(item_id)
+            images = item.get("images") or []
+            artists = item.get("artists") or []
+            return {
+                "type": "Album",
+                "title": item.get("name"),
+                "subtitle": ", ".join(a.get("name", "") for a in artists if a.get("name")),
+                "image": images[0]["url"] if images else None,
+                "external_url": item.get("external_urls", {}).get("spotify"),
+            }
+
+        if item_type == "playlist":
+            item = sp.playlist(item_id)
+            images = item.get("images") or []
+            owner = item.get("owner") or {}
+            return {
+                "type": "Spilleliste",
+                "title": item.get("name"),
+                "subtitle": owner.get("display_name") or "",
+                "image": images[0]["url"] if images else None,
+                "external_url": item.get("external_urls", {}).get("spotify"),
+            }
+
+        if item_type == "track":
+            item = sp.track(item_id)
+            album = item.get("album") or {}
+            images = album.get("images") or []
+            artists = item.get("artists") or []
+            return {
+                "type": "Låt",
+                "title": item.get("name"),
+                "subtitle": ", ".join(a.get("name", "") for a in artists if a.get("name")),
+                "image": images[0]["url"] if images else None,
+                "external_url": item.get("external_urls", {}).get("spotify"),
+            }
+
+        if item_type == "artist":
+            item = sp.artist(item_id)
+            images = item.get("images") or []
+            return {
+                "type": "Artist",
+                "title": item.get("name"),
+                "subtitle": "Artist",
+                "image": images[0]["url"] if images else None,
+                "external_url": item.get("external_urls", {}).get("spotify"),
+            }
+
+        if item_type == "episode":
+            item = sp.episode(item_id)
+            images = item.get("images") or []
+            show = item.get("show") or {}
+            return {
+                "type": "Episode",
+                "title": item.get("name"),
+                "subtitle": show.get("name") or "",
+                "image": images[0]["url"] if images else None,
+                "external_url": item.get("external_urls", {}).get("spotify"),
+            }
+
+    except Exception:
+        return None
+
+    return None
+
+
 def get_authorize_url() -> str:
     oauth = spotify_oauth()
     return oauth.get_authorize_url()
@@ -349,7 +440,28 @@ def index():
 
 @app.route("/cards")
 def cards_page():
-    return render_template("cards.html", cards=get_cards(), state=get_state())
+    cards = get_cards()
+    enriched_cards = []
+
+    for uid, card in cards.items():
+        metadata = get_spotify_metadata(card.get("uri", ""))
+        enriched_cards.append(
+            {
+                "uid": uid,
+                "name": card.get("name") or uid,
+                "uri": card.get("uri", ""),
+                "notes": card.get("notes", ""),
+                "meta": metadata,
+            }
+        )
+
+    enriched_cards.sort(key=lambda c: (c["name"] or "").lower())
+
+    return render_template(
+        "cards.html",
+        cards=enriched_cards,
+        state=get_state(),
+    )
 
 
 @app.post("/cards/save")

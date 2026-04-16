@@ -3,111 +3,445 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Pinyl – kort</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <title>Pinyl – Kort</title>
+  <style>
+    :root {
+      --bg: #0c0c0f;
+      --panel: #15161b;
+      --panel-2: #1c1f27;
+      --line: #2b2f3a;
+      --text: #f5f7fb;
+      --muted: #a8b0bf;
+      --accent: #1db954;
+      --danger: #ff6b6b;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, sans-serif;
+      background:
+        radial-gradient(circle at top right, rgba(29,185,84,0.12), transparent 28%),
+        radial-gradient(circle at top left, rgba(90,120,255,0.10), transparent 24%),
+        var(--bg);
+      color: var(--text);
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 28px;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .title-wrap h1 {
+      margin: 0;
+      font-size: 2rem;
+    }
+
+    .title-wrap p {
+      margin: 6px 0 0;
+      color: var(--muted);
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      text-decoration: none;
+      border: 0;
+      border-radius: 12px;
+      padding: 12px 16px;
+      cursor: pointer;
+      font-weight: 700;
+      background: var(--panel-2);
+      color: var(--text);
+      box-shadow: var(--shadow);
+    }
+
+    .button.primary {
+      background: linear-gradient(135deg, #1db954, #18a449);
+      color: #08110b;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 22px;
+    }
+
+    .panel {
+      background: rgba(21,22,27,0.92);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .panel h2 {
+      margin-top: 0;
+      margin-bottom: 14px;
+      font-size: 1.15rem;
+    }
+
+    .form-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    label {
+      display: grid;
+      gap: 7px;
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+
+    input, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 14px;
+      background: #0f1116;
+      color: var(--text);
+      outline: none;
+    }
+
+    input:focus, textarea:focus {
+      border-color: #4c9ffe;
+      box-shadow: 0 0 0 3px rgba(76,159,254,0.16);
+    }
+
+    textarea {
+      min-height: 90px;
+      resize: vertical;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 0.92rem;
+      margin-top: 8px;
+    }
+
+    .status-box {
+      margin-top: 18px;
+      border-top: 1px solid var(--line);
+      padding-top: 16px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 18px;
+    }
+
+    .music-card {
+      overflow: hidden;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(28,31,39,0.96), rgba(18,20,25,0.96));
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .cover {
+      aspect-ratio: 1 / 1;
+      background: linear-gradient(135deg, #222733, #11131a);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 0.95rem;
+      overflow: hidden;
+    }
+
+    .cover img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .music-body {
+      padding: 16px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .type-pill {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(29,185,84,0.12);
+      color: #73e39a;
+      font-size: 0.8rem;
+      font-weight: 700;
+      border: 1px solid rgba(29,185,84,0.22);
+    }
+
+    .music-title {
+      margin: 0;
+      font-size: 1.08rem;
+      line-height: 1.3;
+    }
+
+    .music-subtitle {
+      margin: 0;
+      color: var(--muted);
+      min-height: 1.2em;
+    }
+
+    .meta-block {
+      display: grid;
+      gap: 6px;
+      font-size: 0.9rem;
+    }
+
+    .meta-label {
+      color: var(--muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .uid, .uri {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      word-break: break-all;
+      color: #d6dcef;
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+
+    .button.small {
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-size: 0.9rem;
+    }
+
+    .button.danger {
+      background: rgba(255,107,107,0.14);
+      color: #ff9a9a;
+      border: 1px solid rgba(255,107,107,0.22);
+    }
+
+    .empty {
+      border: 1px dashed var(--line);
+      border-radius: 18px;
+      padding: 24px;
+      text-align: center;
+      color: var(--muted);
+      background: rgba(21,22,27,0.6);
+    }
+
+    @media (max-width: 980px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .topbar {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
 </head>
 <body>
-  <div class="wrap">
-    <header class="topbar">
-      <div>
-        <h1>Kortadministrasjon</h1>
-        <p class="muted">Registrer tagger og knytt dem til Spotify-URI-er</p>
+  <div class="container">
+    <div class="topbar">
+      <div class="title-wrap">
+        <h1>Pinyl-kort</h1>
+        <p>Registrer NFC-kort og koble dem til album, spillelister og låter.</p>
       </div>
-      <nav>
-        <a class="button secondary" href="{{ url_for('index') }}">Dashboard</a>
-        <a class="button secondary" href="{{ url_for('cards_page') }}">Kort</a>
-      </nav>
-    </header>
 
-    <section class="grid two">
-      <article class="card">
-        <h2>Registrer nytt kort</h2>
-        <div class="actions">
-          <button class="button" type="button" id="scan-btn">Vent på neste tag</button>
-          <span id="scan-status" class="muted">Sist sett: {{ state.last_seen_uid or '-' }}</span>
-        </div>
-        <form method="post" action="{{ url_for('save_card_route') }}" class="stack gap top-gap">
-          <label>UID
-            <input type="text" name="uid" id="uid" required placeholder="1D1430E5990000">
+      <div class="actions">
+        <a class="button" href="{{ url_for('index') }}">Til dashboard</a>
+        <button class="button primary" type="button" onclick="waitForCard()">Vent på neste tag</button>
+      </div>
+    </div>
+
+    <div class="layout">
+      <div class="panel">
+        <h2>Legg til / oppdater kort</h2>
+
+        <form method="post" action="{{ url_for('save_card_route') }}" class="form-grid">
+          <label>
+            UID
+            <input id="uid" name="uid" type="text" placeholder="Skann et kort eller skriv UID manuelt">
           </label>
-          <label>Navn
-            <input type="text" name="name" id="name" placeholder="Mørke skyer">
+
+          <label>
+            Navn
+            <input id="name" name="name" type="text" placeholder="For eksempel: Morgenplate">
           </label>
-          <label>Spotify URI eller lenke
-            <input type="text" name="uri" id="uri" required placeholder="spotify:album:... eller https://open.spotify.com/...">
+
+          <label>
+            Spotify-lenke eller URI
+            <input id="uri" name="uri" type="text" placeholder="https://open.spotify.com/... eller spotify:album:...">
           </label>
-          <label>Notat
-            <textarea name="notes" id="notes" rows="3" placeholder="Valgfritt"></textarea>
+
+          <label>
+            Notater
+            <textarea id="notes" name="notes" placeholder="Valgfritt"></textarea>
           </label>
-          <button class="button" type="submit">Lagre kort</button>
+
+          <button class="button primary" type="submit">Lagre kort</button>
         </form>
-      </article>
 
-      <article class="card">
-        <h2>Tips</h2>
-        <ul class="list">
-          <li>Hold taggen rolig på leseren et par sekunder ved første registrering.</li>
-          <li>Du kan lime inn både Spotify-URI og vanlige Spotify-lenker.</li>
-          <li>Når et kort er lagret, starter avspillingen automatisk ved neste skann.</li>
-        </ul>
-      </article>
-    </section>
+        <p class="hint">
+          Du kan lime inn både vanlig Spotify-lenke og Spotify URI.
+        </p>
 
-    <section class="card">
-      <h2>Registrerte kort</h2>
-      {% if cards %}
-      <table>
-        <thead>
-          <tr><th>UID</th><th>Navn</th><th>URI</th><th>Notat</th><th></th></tr>
-        </thead>
-        <tbody>
-          {% for uid, card in cards.items() %}
-          <tr>
-            <td><code>{{ uid }}</code></td>
-            <td>{{ card.name }}</td>
-            <td class="truncate">{{ card.uri }}</td>
-            <td>{{ card.notes }}</td>
-            <td>
-              <form method="post" action="{{ url_for('delete_card', uid=uid) }}" onsubmit="return confirm('Slette dette kortet?');">
-                <button class="button danger" type="submit">Slett</button>
-              </form>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-        <p class="muted">Ingen kort registrert ennå.</p>
-      {% endif %}
-    </section>
+        <div class="status-box">
+          <div><strong>Sist sett UID:</strong> <span id="lastSeenUid">{{ state.last_seen_uid or "-" }}</span></div>
+          <div><strong>Status:</strong> <span id="scanStatus">{{ state.status or "-" }}</span></div>
+          <div><strong>Leser:</strong> {{ state.reader_name or "-" }}</div>
+        </div>
+      </div>
+
+      <div>
+        {% if cards %}
+          <div class="cards-grid">
+            {% for card in cards %}
+              <div class="music-card">
+                <div class="cover">
+                  {% if card.meta and card.meta.image %}
+                    <img src="{{ card.meta.image }}" alt="Cover">
+                  {% else %}
+                    <span>Ingen cover art</span>
+                  {% endif %}
+                </div>
+
+                <div class="music-body">
+                  <div class="type-pill">
+                    {{ card.meta.type if card.meta else "Ukjent type" }}
+                  </div>
+
+                  <h3 class="music-title">
+                    {{ card.meta.title if card.meta and card.meta.title else card.name }}
+                  </h3>
+
+                  <p class="music-subtitle">
+                    {{ card.meta.subtitle if card.meta and card.meta.subtitle else "" }}
+                  </p>
+
+                  <div class="meta-block">
+                    <div class="meta-label">Kortnavn</div>
+                    <div>{{ card.name }}</div>
+                  </div>
+
+                  <div class="meta-block">
+                    <div class="meta-label">UID</div>
+                    <div class="uid">{{ card.uid }}</div>
+                  </div>
+
+                  <div class="meta-block">
+                    <div class="meta-label">Spotify</div>
+                    <div class="uri">{{ card.uri }}</div>
+                  </div>
+
+                  {% if card.notes %}
+                    <div class="meta-block">
+                      <div class="meta-label">Notater</div>
+                      <div>{{ card.notes }}</div>
+                    </div>
+                  {% endif %}
+
+                  <div class="card-actions">
+                    <button
+                      class="button small"
+                      type="button"
+                      onclick="fillForm({{ card.uid|tojson }}, {{ (card.name or '')|tojson }}, {{ (card.uri or '')|tojson }}, {{ (card.notes or '')|tojson }})"
+                    >
+                      Rediger
+                    </button>
+
+                    {% if card.meta and card.meta.external_url %}
+                      <a class="button small" href="{{ card.meta.external_url }}" target="_blank" rel="noopener noreferrer">
+                        Åpne i Spotify
+                      </a>
+                    {% endif %}
+
+                    <form method="post" action="{{ url_for('delete_card', uid=card.uid) }}" onsubmit="return confirm('Slette dette kortet?');">
+                      <button class="button small danger" type="submit">Slett</button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="empty">
+            Ingen kort lagret ennå. Trykk <strong>Vent på neste tag</strong> og skann et kort for å komme i gang.
+          </div>
+        {% endif %}
+      </div>
+    </div>
   </div>
 
-<script>
-const scanBtn = document.getElementById('scan-btn');
-const scanStatus = document.getElementById('scan-status');
-scanBtn.addEventListener('click', async () => {
-  scanBtn.disabled = true;
-  scanStatus.textContent = 'Venter på ny tag ...';
-  try {
-    const res = await fetch('/api/wait-for-card');
-    const data = await res.json();
-    if (data.ok) {
-      document.getElementById('uid').value = data.uid;
-      if (data.card) {
-        document.getElementById('name').value = data.card.name || '';
-        document.getElementById('uri').value = data.card.uri || '';
-        document.getElementById('notes').value = data.card.notes || '';
-      }
-      scanStatus.textContent = 'Fant tag: ' + data.uid;
-    } else {
-      scanStatus.textContent = 'Ingen ny tag oppdaget innen tidsfristen.';
+  <script>
+    function fillForm(uid, name, uri, notes) {
+      document.getElementById('uid').value = uid || '';
+      document.getElementById('name').value = name || '';
+      document.getElementById('uri').value = uri || '';
+      document.getElementById('notes').value = notes || '';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  } catch (err) {
-    scanStatus.textContent = 'Feil ved skanning.';
-  } finally {
-    scanBtn.disabled = false;
-  }
-});
-</script>
+
+    async function waitForCard() {
+      const statusEl = document.getElementById('scanStatus');
+      const uidEl = document.getElementById('lastSeenUid');
+
+      statusEl.textContent = 'Venter på tag...';
+
+      try {
+        const res = await fetch('/api/wait-for-card');
+        const data = await res.json();
+
+        if (!data.ok) {
+          statusEl.textContent = 'Timeout - ingen ny tag';
+          return;
+        }
+
+        uidEl.textContent = data.uid || '-';
+        statusEl.textContent = 'Tag funnet';
+
+        document.getElementById('uid').value = data.uid || '';
+        document.getElementById('name').value = data.card?.name || data.uid || '';
+        document.getElementById('uri').value = data.card?.uri || '';
+        document.getElementById('notes').value = data.card?.notes || '';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } catch (err) {
+        statusEl.textContent = 'Feil ved skanning';
+        alert('Kunne ikke vente på tag: ' + err.message);
+      }
+    }
+  </script>
 </body>
 </html>
