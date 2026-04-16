@@ -123,12 +123,28 @@ def spotify_ready() -> bool:
     )
 
 
-def get_spotify_client() -> Spotify:
+def get_valid_token_info():
     oauth = spotify_oauth()
-    token_info = oauth.get_cached_token()
+
+    cache_handler = oauth.cache_handler
+    token_info = cache_handler.get_cached_token() if cache_handler else None
+
     if not token_info:
         raise RuntimeError("Spotify er ikke autorisert ennå.")
-    return Spotify(auth_manager=oauth)
+
+    refresh_token = token_info.get("refresh_token")
+
+    if oauth.is_token_expired(token_info):
+        if not refresh_token:
+            raise RuntimeError("Spotify-token er utløpt og refresh token mangler. Koble til Spotify på nytt.")
+        token_info = oauth.refresh_access_token(refresh_token)
+
+    return oauth, token_info
+
+
+def get_spotify_client() -> Spotify:
+    oauth, token_info = get_valid_token_info()
+    return Spotify(auth=token_info["access_token"], auth_manager=oauth)
 
 
 def get_device_name() -> str:
@@ -424,7 +440,10 @@ def index():
     cards = get_cards()
     playback = current_playback()
     devices = current_devices_safe()
-    spotify_authorized = bool(spotify_ready() and spotify_oauth().get_cached_token()) if spotify_ready() else False
+    try:
+        spotify_authorized = bool(spotify_ready() and get_valid_token_info())
+    except Exception:
+        spotify_authorized = False
 
     return render_template(
         "index.html",
@@ -580,6 +599,7 @@ def spotify_callback():
 
     oauth = spotify_oauth()
     oauth.get_access_token(code=code, check_cache=False)
+    update_state(last_error=None, status="spotify_connected")
     return redirect(url_for("index"))
 
 
