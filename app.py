@@ -568,21 +568,15 @@ def api_state():
 @app.get("/api/wait-for-card")
 def api_wait_for_card():
     timeout = time.time() + 20
+    initial = get_state().get("last_seen_uid")
 
     while time.time() < timeout:
-        uid = read_uid_once()
-
-        if uid:
-            state = update_state(
-                last_seen_uid=uid,
-                last_seen_at=datetime.now().isoformat(timespec="seconds"),
-                status="card_seen",
-                last_error=None,
-            )
+        state = get_state()
+        uid = state.get("last_seen_uid")
+        if uid and uid != initial:
             card = get_cards().get(uid)
             return jsonify({"ok": True, "uid": uid, "card": card, "state": state})
-
-        time.sleep(0.5)
+        time.sleep(0.25)
 
     return jsonify({"ok": False, "timeout": True, "state": get_state()})
 
@@ -620,4 +614,6 @@ def spotify_logout():
 
 if __name__ == "__main__":
     ensure_files()
+    thread = threading.Thread(target=nfc_worker, daemon=True)
+    thread.start()
     app.run(host="0.0.0.0", port=PORT, debug=False)
