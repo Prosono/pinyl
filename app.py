@@ -269,18 +269,43 @@ def get_authorize_url() -> str:
 def list_devices(sp: Spotify):
     return sp.devices().get("devices", [])
 
+def restart_raspotify():
+    try:
+        subprocess.run(
+            ["sudo", "systemctl", "restart", "raspotify"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+    except Exception:
+        pass
 
-def find_target_device(sp: Spotify):
+
+def find_target_device(sp: Spotify, retries: int = 30, restart_after: int = 8):
     target_name = get_device_name()
-    devices = list_devices(sp)
+    restarted = False
 
-    for device in devices:
-        if device.get("name") == target_name:
-            return device
+    for attempt in range(retries):
+        devices = list_devices(sp)
+
+        for device in devices:
+            if device.get("name") == target_name:
+                return device
+
+        if attempt == restart_after and not restarted:
+            update_state(
+                status="waiting_for_spotify_device",
+                last_error=f"Spotify-enheten '{target_name}' mangler. Restarter Raspotify...",
+            )
+            restart_raspotify()
+            restarted = True
+            time.sleep(10)
+        else:
+            time.sleep(1)
 
     raise RuntimeError(
-        f"Fant ikke Spotify-enheten '{target_name}'. "
-        "Åpne Spotify og bekreft at Raspotify/librespot kjører."
+        f"Fant ikke Spotify-enheten '{target_name}' etter {retries} sekunder. "
+        "Raspotify/librespot kjører kanskje, men Spotify API returnerer ikke enheten ennå."
     )
 
 
