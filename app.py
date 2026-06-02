@@ -593,6 +593,7 @@ def spotify_callback():
     if not spotify_ready():
         return redirect(url_for("index"))
 
+
     code = request.args.get("code")
     if not code:
         return redirect(url_for("index"))
