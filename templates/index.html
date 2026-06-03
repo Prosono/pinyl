@@ -89,6 +89,13 @@
           {% if spotify_authorized %}<span class="good">Ja</span>{% else %}<span class="bad">Nei</span>{% endif %}
         </div>
         <div><strong>Målenhet:</strong> <code>{{ target_device }}</code></div>
+        <div><strong>Spotify sist sjekket:</strong> {{ state.spotify_last_checked_at|pretty_dt }}</div>
+        <div><strong>Målenhet klar:</strong>
+          {% if state.spotify_device_ready_at %}<span class="good">{{ state.spotify_device_ready_at|pretty_dt }}</span>{% else %}<span class="bad">Nei</span>{% endif %}
+        </div>
+        {% if state.spotify_last_error %}
+          <div><strong>Spotify-varsel:</strong> <span class="bad">{{ state.spotify_last_error }}</span></div>
+        {% endif %}
       </div>
       <div class="row">
         {% if not spotify_authorized %}

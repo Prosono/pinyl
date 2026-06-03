@@ -60,9 +60,10 @@ http://10.0.0.26:8080/spotify/callback
 
 ```bash
 source .venv/bin/activate
-export $(grep -v '^#' .env | xargs)
 python app.py
 ```
+
+Appen laster `.env` automatisk ved oppstart.
 
 Åpne så:
 
@@ -79,6 +80,18 @@ sudo cp pinyl-web.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable pinyl-web
 sudo systemctl start pinyl-web
+```
+
+Ved oppstart refresher Pinyl Spotify-token fra `data/.spotify_cache` og prøver å finne Spotify Connect-enheten automatisk. Hvis Raspotify ikke dukker opp, prøver appen å kjøre:
+
+```bash
+sudo -n systemctl restart raspotify
+```
+
+For at dette skal fungere fra systemd uten manuell passordprompt, gi `pinyl`-brukeren en snever sudo-rettighet, for eksempel med `sudo visudo`:
+
+```text
+pinyl ALL=NOPASSWD: /bin/systemctl restart raspotify
 ```
 
 ## Lagring

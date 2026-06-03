@@ -8,15 +8,36 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
+from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request, url_for
 from spotipy import Spotify
 from spotipy.oauth2 import SpotifyOAuth
 
 BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
-DATA_DIR.mkdir(exist_ok=True)
+
+load_dotenv(BASE_DIR / ".env")
+
+
+def resolve_local_path(value, fallback: Path) -> Path:
+    path = Path(value) if value else fallback
+    if not path.is_absolute():
+        path = BASE_DIR / path
+    return path
+
+
+def env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() not in {"0", "false", "no", "off"}
+
+
+DATA_DIR = resolve_local_path(os.getenv("PINYL_DATA_DIR"), BASE_DIR / "data")
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 CARDS_FILE = DATA_DIR / "cards.json"
 STATE_FILE = DATA_DIR / "state.json"
+SPOTIFY_CACHE_FILE = resolve_local_path(os.getenv("SPOTIFY_CACHE_PATH"), DATA_DIR / ".spotify_cache")
+SPOTIFY_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 DEFAULT_CARDS = {}
 DEFAULT_STATE = {
@@ -27,6 +48,10 @@ DEFAULT_STATE = {
     "last_played_at": None,
     "last_error": None,
     "reader_name": None,
+    "spotify_last_checked_at": None,
+    "spotify_device_ready_at": None,
+    "spotify_target_device_id": None,
+    "spotify_last_error": None,
     "status": "idle",
 }
 
@@ -35,6 +60,12 @@ POLL_INTERVAL = float(os.getenv("NFC_POLL_INTERVAL", "0.4"))
 DEBOUNCE_SECONDS = float(os.getenv("NFC_DEBOUNCE_SECONDS", "5"))
 PORT = int(os.getenv("PORT", "8080"))
 SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "change-me")
+SPOTIFY_TRANSFER_DELAY = float(os.getenv("SPOTIFY_TRANSFER_DELAY", "0.8"))
+SPOTIFY_WARMUP_ENABLED = env_bool("SPOTIFY_WARMUP_ENABLED", True)
+SPOTIFY_WARMUP_START_DELAY = float(os.getenv("SPOTIFY_WARMUP_START_DELAY", "5"))
+SPOTIFY_WARMUP_INTERVAL = float(os.getenv("SPOTIFY_WARMUP_INTERVAL", "300"))
+SPOTIFY_WARMUP_RETRIES = int(os.getenv("SPOTIFY_WARMUP_RETRIES", "20"))
+SPOTIFY_WARMUP_RESTART_AFTER = int(os.getenv("SPOTIFY_WARMUP_RESTART_AFTER", "4"))
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = SECRET_KEY
@@ -108,19 +139,32 @@ def spotify_oauth() -> SpotifyOAuth:
     return SpotifyOAuth(
         client_id=os.getenv("SPOTIFY_CLIENT_ID"),
         client_secret=os.getenv("SPOTIFY_CLIENT_SECRET"),
-        redirect_uri=os.getenv("SPOTIFY_REDIRECT_URI", f"http://127.0.0.1:{PORT}/spotify/callback"),
+        redirect_uri=get_spotify_redirect_uri(),
         scope=SPOTIFY_SCOPES,
         open_browser=False,
-        cache_path=str(DATA_DIR / ".spotify_cache"),
+        cache_path=str(SPOTIFY_CACHE_FILE),
     )
+
+
+def get_spotify_redirect_uri() -> str:
+    return os.getenv("SPOTIFY_REDIRECT_URI", f"http://127.0.0.1:{PORT}/spotify/callback")
 
 
 def spotify_ready() -> bool:
     return bool(
         os.getenv("SPOTIFY_CLIENT_ID")
         and os.getenv("SPOTIFY_CLIENT_SECRET")
-        and os.getenv("SPOTIFY_REDIRECT_URI")
     )
+
+
+def preserve_refresh_token(oauth: SpotifyOAuth, token_info, refresh_token):
+    if not token_info or not refresh_token or token_info.get("refresh_token"):
+        return token_info
+
+    token_info["refresh_token"] = refresh_token
+    if oauth.cache_handler:
+        oauth.cache_handler.save_token_to_cache(token_info)
+    return token_info
 
 
 def get_valid_token_info():
@@ -138,6 +182,7 @@ def get_valid_token_info():
         if not refresh_token:
             raise RuntimeError("Spotify-token er utløpt og refresh token mangler. Koble til Spotify på nytt.")
         token_info = oauth.refresh_access_token(refresh_token)
+        token_info = preserve_refresh_token(oauth, token_info, refresh_token)
 
     return oauth, token_info
 
@@ -269,16 +314,30 @@ def get_authorize_url() -> str:
 def list_devices(sp: Spotify):
     return sp.devices().get("devices", [])
 
+
 def restart_raspotify():
     try:
-        subprocess.run(
-            ["sudo", "systemctl", "restart", "raspotify"],
+        result = subprocess.run(
+            ["sudo", "-n", "systemctl", "restart", "raspotify"],
             capture_output=True,
             text=True,
             timeout=20,
         )
+        return result.returncode == 0
     except Exception:
-        pass
+        return False
+
+
+def find_matching_device(devices, target_name: str):
+    normalized_target = target_name.strip().casefold()
+    matches = [
+        device
+        for device in devices
+        if (device.get("name") or "").strip().casefold() == normalized_target
+    ]
+    if not matches:
+        return None
+    return next((device for device in matches if device.get("is_active")), matches[0])
 
 
 def find_target_device(sp: Spotify, retries: int = 30, restart_after: int = 8):
@@ -287,17 +346,23 @@ def find_target_device(sp: Spotify, retries: int = 30, restart_after: int = 8):
 
     for attempt in range(retries):
         devices = list_devices(sp)
-
-        for device in devices:
-            if device.get("name") == target_name:
-                return device
+        target = find_matching_device(devices, target_name)
+        if target:
+            return target
 
         if attempt == restart_after and not restarted:
             update_state(
                 status="waiting_for_spotify_device",
                 last_error=f"Spotify-enheten '{target_name}' mangler. Restarter Raspotify...",
             )
-            restart_raspotify()
+            restarted = restart_raspotify()
+            if not restarted:
+                update_state(
+                    spotify_last_error=(
+                        "Kunne ikke restarte Raspotify automatisk. "
+                        "Sjekk at pinyl-brukeren har sudo-rettighet til systemctl restart raspotify."
+                    )
+                )
             restarted = True
             time.sleep(10)
         else:
@@ -309,12 +374,36 @@ def find_target_device(sp: Spotify, retries: int = 30, restart_after: int = 8):
     )
 
 
-def activate_target_device(sp: Spotify):
-    target = find_target_device(sp)
+def transfer_to_device(sp: Spotify, target, force_play: bool = False):
     device_id = target["id"]
-    sp.transfer_playback(device_id=device_id, force_play=False)
-    time.sleep(0.5)
+    try:
+        sp.transfer_playback(device_id=device_id, force_play=force_play)
+        transferred = True
+    except Exception as exc:
+        update_state(spotify_last_error=f"Kunne ikke aktivere Spotify-enheten '{target.get('name')}': {exc}")
+        transferred = False
+    time.sleep(SPOTIFY_TRANSFER_DELAY)
+    return transferred
+
+
+def activate_target_device(
+    sp: Spotify,
+    force_play: bool = False,
+    retries: int = 30,
+    restart_after: int = 8,
+):
+    target = find_target_device(sp, retries=retries, restart_after=restart_after)
+    transfer_to_device(sp, target, force_play=force_play)
     return target
+
+
+def start_uri_on_device(sp: Spotify, device_id: str, uri: str):
+    if uri.startswith(("spotify:album:", "spotify:playlist:", "spotify:artist:")):
+        sp.start_playback(device_id=device_id, context_uri=uri)
+    elif uri.startswith(("spotify:track:", "spotify:episode:")):
+        sp.start_playback(device_id=device_id, uris=[uri])
+    else:
+        raise RuntimeError(f"Ukjent eller ugyldig Spotify-referanse: {uri}")
 
 
 def play_uri(uri: str):
@@ -323,19 +412,23 @@ def play_uri(uri: str):
     device_id = target["id"]
 
     uri = normalize_spotify_reference(uri)
-    if uri.startswith(("spotify:album:", "spotify:playlist:", "spotify:artist:")):
-        sp.start_playback(device_id=device_id, context_uri=uri)
-    elif uri.startswith(("spotify:track:", "spotify:episode:")):
-        sp.start_playback(device_id=device_id, uris=[uri])
-    else:
-        raise RuntimeError(f"Ukjent eller ugyldig Spotify-referanse: {uri}")
+    try:
+        start_uri_on_device(sp, device_id, uri)
+    except Exception:
+        update_state(
+            status="waiting_for_spotify_device",
+            last_error="Spotify svarte ikke på første avspillingsforsøk. Prøver Raspotify på nytt...",
+        )
+        restart_raspotify()
+        target = activate_target_device(sp, force_play=True)
+        start_uri_on_device(sp, target["id"], uri)
 
     return target
 
 
 def resume_playback():
     sp = get_spotify_client()
-    target = activate_target_device(sp)
+    target = activate_target_device(sp, force_play=True)
     sp.start_playback(device_id=target["id"])
     return target
 
@@ -349,7 +442,7 @@ def pause_playback():
 
 def next_track():
     sp = get_spotify_client()
-    target = activate_target_device(sp)
+    target = activate_target_device(sp, force_play=True)
     sp.next_track(device_id=target["id"])
     return target
 
@@ -368,6 +461,65 @@ def current_devices_safe():
         return list_devices(sp)
     except Exception:
         return []
+
+
+def now_iso():
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def warmup_spotify():
+    update_state(spotify_last_checked_at=now_iso())
+
+    if not spotify_ready():
+        update_state(
+            spotify_last_error="Spotify API mangler client id eller client secret.",
+            status="spotify_not_configured",
+        )
+        return False
+
+    try:
+        sp = get_spotify_client()
+    except Exception as exc:
+        update_state(
+            spotify_last_error=str(exc),
+            status="spotify_needs_login",
+        )
+        return False
+
+    try:
+        target = find_target_device(
+            sp,
+            retries=SPOTIFY_WARMUP_RETRIES,
+            restart_after=SPOTIFY_WARMUP_RESTART_AFTER,
+        )
+        transferred = True
+        playback = sp.current_playback()
+        playback_device = (playback or {}).get("device") or {}
+        if not ((playback or {}).get("is_playing") and playback_device.get("id") != target.get("id")):
+            transferred = transfer_to_device(sp, target, force_play=False)
+
+        updates = {
+            "spotify_device_ready_at": now_iso(),
+            "spotify_target_device_id": target.get("id"),
+        }
+        if transferred:
+            updates["spotify_last_error"] = None
+        update_state(**updates)
+        return True
+    except Exception as exc:
+        update_state(
+            spotify_last_error=str(exc),
+            status="spotify_device_missing",
+        )
+        return False
+
+
+def spotify_warmup_worker():
+    time.sleep(SPOTIFY_WARMUP_START_DELAY)
+
+    while True:
+        warmup_spotify()
+        time.sleep(SPOTIFY_WARMUP_INTERVAL)
 
 
 def read_uid_once():
@@ -624,16 +776,18 @@ def spotify_callback():
         return redirect(url_for("index"))
 
     oauth = spotify_oauth()
-    oauth.get_access_token(code=code, check_cache=False)
+    previous_token_info = oauth.cache_handler.get_cached_token() if oauth.cache_handler else None
+    previous_refresh_token = previous_token_info.get("refresh_token") if previous_token_info else None
+    token_info = oauth.get_access_token(code=code, check_cache=False)
+    preserve_refresh_token(oauth, token_info, previous_refresh_token)
     update_state(last_error=None, status="spotify_connected")
     return redirect(url_for("index"))
 
 
 @app.get("/spotify/logout")
 def spotify_logout():
-    cache = DATA_DIR / ".spotify_cache"
-    if cache.exists():
-        cache.unlink()
+    if SPOTIFY_CACHE_FILE.exists():
+        SPOTIFY_CACHE_FILE.unlink()
     return redirect(url_for("index"))
 
 
@@ -641,4 +795,7 @@ if __name__ == "__main__":
     ensure_files()
     thread = threading.Thread(target=nfc_worker, daemon=True)
     thread.start()
+    if SPOTIFY_WARMUP_ENABLED:
+        spotify_thread = threading.Thread(target=spotify_warmup_worker, daemon=True)
+        spotify_thread.start()
     app.run(host="0.0.0.0", port=PORT, debug=False)
