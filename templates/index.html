@@ -4,167 +4,198 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Pinyl</title>
-  <style>
-    body {
-      font-family: system-ui, sans-serif;
-      max-width: 980px;
-      margin: 0 auto;
-      padding: 24px;
-      background: #111;
-      color: #f5f5f5;
-    }
-    .card {
-      background: #1b1b1b;
-      border: 1px solid #2d2d2d;
-      border-radius: 14px;
-      padding: 18px;
-      margin-bottom: 18px;
-    }
-    .row {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-    .muted {
-      color: #b6b6b6;
-    }
-    .good {
-      color: #66d17a;
-    }
-    .bad {
-      color: #ff7a7a;
-    }
-    button, a.button {
-      background: #2d2d2d;
-      color: #fff;
-      border: 0;
-      border-radius: 10px;
-      padding: 10px 14px;
-      cursor: pointer;
-      text-decoration: none;
-      display: inline-block;
-    }
-    button.primary, a.button.primary {
-      background: #1db954;
-      color: #111;
-      font-weight: 700;
-    }
-    input, textarea {
-      width: 100%;
-      box-sizing: border-box;
-      background: #101010;
-      color: #fff;
-      border: 1px solid #333;
-      border-radius: 10px;
-      padding: 10px 12px;
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 18px;
-    }
-    @media (max-width: 800px) {
-      .grid {
-        grid-template-columns: 1fr;
-      }
-    }
-    code {
-      background: #0d0d0d;
-      padding: 2px 6px;
-      border-radius: 6px;
-    }
-  </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <h1>Pinyl</h1>
+  {% set item = playback.item if playback and playback.item else none %}
+  {% set artists = item.artists | map(attribute='name') | join(', ') if item and item.artists else '' %}
+  {% set cover_url = none %}
+  {% if item and item.album and item.album.images %}
+    {% set cover_url = item.album.images[0].url %}
+  {% elif item and item.images %}
+    {% set cover_url = item.images[0].url %}
+  {% endif %}
 
-  <div class="card">
-    <div class="row" style="justify-content: space-between;">
-      <div>
-        <div><strong>Spotify API-konfigurasjon:</strong>
-          {% if spotify_ready %}<span class="good">OK</span>{% else %}<span class="bad">Mangler</span>{% endif %}
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand-lockup" href="{{ url_for('index') }}" aria-label="Pinyl dashboard">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div class="brand-copy">
+          <h1 class="brand-title">Pinyl</h1>
+          <p class="brand-subtitle">NFC platespiller</p>
         </div>
-        <div><strong>Autorisert:</strong>
-          {% if spotify_authorized %}<span class="good">Ja</span>{% else %}<span class="bad">Nei</span>{% endif %}
-        </div>
-        <div><strong>Målenhet:</strong> <code>{{ target_device }}</code></div>
-        <div><strong>Spotify sist sjekket:</strong> {{ state.spotify_last_checked_at|pretty_dt }}</div>
-        <div><strong>Målenhet klar:</strong>
-          {% if state.spotify_device_ready_at %}<span class="good">{{ state.spotify_device_ready_at|pretty_dt }}</span>{% else %}<span class="bad">Nei</span>{% endif %}
-        </div>
-        {% if state.spotify_last_error %}
-          <div><strong>Spotify-varsel:</strong> <span class="bad">{{ state.spotify_last_error }}</span></div>
-        {% endif %}
-      </div>
-      <div class="row">
+      </a>
+
+      <nav class="nav-actions" aria-label="Hovednavigasjon">
+        <a class="button ghost" href="{{ url_for('cards_page') }}">Kort</a>
         {% if not spotify_authorized %}
           <a class="button primary" href="{{ url_for('spotify_login') }}">Koble til Spotify</a>
         {% else %}
-          <a class="button" href="{{ url_for('spotify_logout') }}">Logg ut av Spotify</a>
+          <a class="button ghost" href="{{ url_for('spotify_logout') }}">Logg ut</a>
         {% endif %}
-        <a class="button" href="{{ url_for('cards_page') }}">Kort</a>
-      </div>
-    </div>
-  </div>
+      </nav>
+    </header>
 
-  <div class="grid">
-    <div class="card">
-      <h2>Status</h2>
-      <p><strong>Leser:</strong> {{ state.reader_name or "-" }}</p>
-      <p><strong>Status:</strong> {{ state.status or "-" }}</p>
-      <p><strong>Sist sett UID:</strong> {{ state.last_seen_uid or "-" }}</p>
-      <p><strong>Sist sett:</strong> {{ state.last_seen_at|pretty_dt }}</p>
-      <p><strong>Sist spilt UID:</strong> {{ state.last_played_uid or "-" }}</p>
-      <p><strong>Sist spilt URI:</strong> {{ state.last_played_uri or "-" }}</p>
-      <p><strong>Sist spilt:</strong> {{ state.last_played_at|pretty_dt }}</p>
-      <p><strong>Siste feil:</strong> {{ state.last_error or "-" }}</p>
-    </div>
+    <main class="main-deck">
+      <section class="console-panel playback-panel scanline" aria-labelledby="playbackTitle">
+        <div class="turntable" aria-hidden="true">
+          <div class="record-visual">
+            <div class="record-cover">
+              {% if cover_url %}
+                <img src="{{ cover_url }}" alt="" onerror="this.remove()">
+              {% endif %}
+            </div>
+          </div>
+          <div class="tonearm"></div>
+        </div>
 
-    <div class="card">
-      <h2>Avspilling</h2>
-      {% if playback and playback.item %}
-        <p><strong>Nå spiller:</strong> {{ playback.item.name }}</p>
-        <p class="muted">
-          {% if playback.item.artists %}
-            {{ playback.item.artists | map(attribute='name') | join(', ') }}
+        <div class="now-stack">
+          <div>
+            <p class="page-kicker">Nåværende signal</p>
+            {% if item %}
+              <h2 id="playbackTitle" class="now-title">{{ item.name }}</h2>
+              {% if artists %}
+                <p class="now-subtitle">{{ artists }}</p>
+              {% endif %}
+            {% else %}
+              <h2 id="playbackTitle" class="now-title">Klar for tagg</h2>
+              <p class="now-subtitle">Legg et NFC-kort på leseren.</p>
+            {% endif %}
+          </div>
+
+          <div class="status-pill">
+            {% if playback and playback.is_playing %}
+              <span class="status-dot good" aria-hidden="true"></span>
+              Spiller
+            {% elif spotify_authorized %}
+              <span class="status-dot warn" aria-hidden="true"></span>
+              Standby
+            {% else %}
+              <span class="status-dot bad" aria-hidden="true"></span>
+              Spotify mangler
+            {% endif %}
+          </div>
+
+          <div class="control-bank" aria-label="Avspillingskontroller">
+            <button class="button primary" type="button" onclick="resumePlayback()">
+              <span class="control-icon icon-play" aria-hidden="true"></span>
+              Spill
+            </button>
+            <button class="button" type="button" onclick="pausePlayback()">
+              <span class="control-icon icon-pause" aria-hidden="true"></span>
+              Pause
+            </button>
+            <button class="button" type="button" onclick="nextTrack()">
+              <span class="control-icon icon-next" aria-hidden="true"></span>
+              Neste
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="side-stack" aria-label="Systemstatus">
+        <section class="console-panel">
+          <p class="page-kicker">Riggen</p>
+          <div class="meter-grid">
+            <div class="meter">
+              <div class="meter-label">Spotify API</div>
+              <div class="meter-value">
+                {% if spotify_ready %}<span class="badge good">OK</span>{% else %}<span class="badge bad">Mangler</span>{% endif %}
+              </div>
+            </div>
+            <div class="meter">
+              <div class="meter-label">Autorisert</div>
+              <div class="meter-value">
+                {% if spotify_authorized %}<span class="badge good">Ja</span>{% else %}<span class="badge bad">Nei</span>{% endif %}
+              </div>
+            </div>
+            <div class="meter">
+              <div class="meter-label">Målenhet</div>
+              <div class="meter-value">{{ target_device }}</div>
+            </div>
+            <div class="meter">
+              <div class="meter-label">Klar siden</div>
+              <div class="meter-value">{{ state.spotify_device_ready_at|pretty_dt }}</div>
+            </div>
+          </div>
+          {% if state.spotify_last_error %}
+            <div class="meter fault fault-offset">
+              <div class="meter-label">Spotify-varsel</div>
+              <div class="meter-value">{{ state.spotify_last_error }}</div>
+            </div>
           {% endif %}
-        </p>
-        <p><strong>Spiller nå:</strong> {{ "Ja" if playback.is_playing else "Nei" }}</p>
-      {% else %}
-        <p class="muted">Ingen aktiv avspilling akkurat nå.</p>
-      {% endif %}
+        </section>
 
-      <div class="row">
-        <button class="primary" type="button" onclick="resumePlayback()">Spill av</button>
-        <button type="button" onclick="pausePlayback()">Pause</button>
-        <button type="button" onclick="nextTrack()">Neste</button>
+        <section class="console-panel">
+          <p class="page-kicker">NFC-leser</p>
+          <div class="meter-grid">
+            <div class="meter">
+              <div class="meter-label">Leser</div>
+              <div class="meter-value">{{ state.reader_name or "-" }}</div>
+            </div>
+            <div class="meter">
+              <div class="meter-label">Status</div>
+              <div class="meter-value">{{ state.status or "-" }}</div>
+            </div>
+            <div class="meter">
+              <div class="meter-label">Siste tagg</div>
+              <div class="meter-value mono">{{ state.last_seen_uid or "-" }}</div>
+            </div>
+            <div class="meter">
+              <div class="meter-label">Sist spilt</div>
+              <div class="meter-value">{{ state.last_played_at|pretty_dt }}</div>
+            </div>
+          </div>
+          {% if state.last_error %}
+            <div class="meter fault fault-offset">
+              <div class="meter-label">Siste feil</div>
+              <div class="meter-value">{{ state.last_error }}</div>
+            </div>
+          {% endif %}
+        </section>
+      </aside>
+    </main>
+
+    <section class="tool-panel top-gap" aria-labelledby="testTitle">
+      <p class="page-kicker">Testpressing</p>
+      <h2 id="testTitle" class="music-title">Spill Spotify-lenke</h2>
+      <div class="tool-grid compact-gap">
+        <input id="uriInput" type="text" placeholder="spotify:album:... eller https://open.spotify.com/...">
+        <button class="button warning" type="button" onclick="playUri()">
+          <span class="control-icon icon-play" aria-hidden="true"></span>
+          Spill valgt
+        </button>
       </div>
-    </div>
-  </div>
+    </section>
 
-  <div class="card">
-    <h2>Test Spotify-lenke / URI</h2>
-    <div class="row">
-      <input id="uriInput" type="text" placeholder="spotify:album:... eller https://open.spotify.com/...">
-      <button class="primary" type="button" onclick="playUri()">Spill valgt</button>
-    </div>
-    <p class="muted">Bruk dette til å teste album, spillelister eller spor manuelt.</p>
-  </div>
-
-  <div class="card">
-    <h2>Enheter</h2>
-    {% if devices %}
-      {% for device in devices %}
-        <p>
-          <strong>{{ device.name }}</strong>
-          {% if device.is_active %}<span class="good">aktiv</span>{% endif %}
-          <span class="muted">({{ device.type }})</span>
-        </p>
-      {% endfor %}
-    {% else %}
-      <p class="muted">Ingen enheter tilgjengelige akkurat nå.</p>
-    {% endif %}
+    <section class="device-strip" aria-labelledby="devicesTitle">
+      <p id="devicesTitle" class="page-kicker">Spotify Connect</p>
+      {% if devices %}
+        <div class="device-list">
+          {% for device in devices %}
+            <div class="device-row">
+              <div class="device-main">
+                <div class="device-name">{{ device.name }}</div>
+                <div class="device-type">{{ device.type }}</div>
+              </div>
+              {% if device.is_active %}
+                <span class="badge good"><span class="status-dot good" aria-hidden="true"></span>Aktiv</span>
+              {% else %}
+                <span class="badge">Standby</span>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="device-row">
+          <div class="device-main">
+            <div class="device-name">Ingen enheter</div>
+            <div class="device-type">Spotify Connect</div>
+          </div>
+          <span class="badge bad">Mangler</span>
+        </div>
+      {% endif %}
+    </section>
   </div>
 
   <script>
